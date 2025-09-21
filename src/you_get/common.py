@@ -111,8 +111,8 @@ SITES = {
     'wanmen'           : 'wanmen',
     'weibo'            : 'miaopai',
     'veoh'             : 'veoh',
-    'vine'             : 'vine',
     'vk'               : 'vk',
+    'x'                : 'twitter',
     'xiaokaxiu'        : 'yixia',
     'xiaojiadianvideo' : 'fc2video',
     'ximalaya'         : 'ximalaya',
@@ -145,7 +145,7 @@ fake_headers = {
     'Accept-Charset': 'UTF-8,*;q=0.5',
     'Accept-Encoding': 'gzip,deflate,sdch',
     'Accept-Language': 'en-US,en;q=0.8',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.183'  # Latest Edge
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 Edg/126.0.2592.113'  # Latest Edge
 }
 
 if sys.stdout.isatty():
@@ -352,6 +352,7 @@ def getHttps(host, url, headers, debuglevel=0):
     conn.set_debuglevel(debuglevel)
     conn.request("GET", url, headers=headers)
     resp = conn.getresponse()
+    logging.debug('getHttps: %s' % resp.getheaders())
     set_cookie = resp.getheader('set-cookie')
 
     data = resp.read()
@@ -362,7 +363,7 @@ def getHttps(host, url, headers, debuglevel=0):
         pass
 
     conn.close()
-    return str(data, encoding='utf-8'), set_cookie
+    return str(data, encoding='utf-8'), set_cookie  # TODO: support raw data
 
 
 # DEPRECATED in favor of get_content()
@@ -714,7 +715,7 @@ def url_save(
                         bar.done()
                     if not force and auto_rename:
                         path, ext = os.path.basename(filepath).rsplit('.', 1)
-                        finder = re.compile(' \([1-9]\d*?\)$')
+                        finder = re.compile(r' \([1-9]\d*?\)$')
                         if (finder.search(path) is None):
                             thisfile = path + ' (1).' + ext
                         else:
@@ -806,6 +807,8 @@ def url_save(
                     except socket.timeout:
                         pass
                     if not buffer:
+                        if file_size == float('+inf'):  # Prevent infinite downloading
+                            break
                         if is_chunked and received_chunk == range_length:
                             break
                         elif not is_chunked and received == file_size:  # Download finished
@@ -826,9 +829,10 @@ def url_save(
         received, os.path.getsize(temp_filepath), temp_filepath
     )
 
-    if os.access(filepath, os.W_OK):
+    if os.access(filepath, os.W_OK) and file_size != float('inf'):
         # on Windows rename could fail if destination filepath exists
-        os.remove(filepath)
+        # we should simply choose a new name instead of brutal os.remove(filepath)
+        filepath = filepath + " (2)"
     os.rename(temp_filepath, filepath)
 
 
@@ -1855,9 +1859,12 @@ def url_to_module(url):
         )
     else:
         try:
-            location = get_location(url) # t.co isn't happy with fake_headers
+            try:
+                location = get_location(url) # t.co isn't happy with fake_headers
+            except:
+                location = get_location(url, headers=fake_headers)
         except:
-            location = get_location(url, headers=fake_headers)
+            location = get_location(url, headers=fake_headers, get_method='GET')
 
         if location and location != url and not location.startswith('/'):
             return url_to_module(location)
